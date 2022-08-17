@@ -1290,3 +1290,43 @@ precompile_test_harness("__init__ cachepath") do load_path
           """)
     @test isa((@eval (using InitCachePath; InitCachePath)), Module)
 end
+
+precompile_test_harness("issue #46296") do load_path
+    write(joinpath(load_path, "CodeInstancePrecompile.jl"),
+        """
+        module CodeInstancePrecompile
+
+        using Core.Compiler: WorldView, InferenceParams, OptimizationParams, AbstractInterpreter
+
+        const global_cache = Dict()
+        Core.Compiler.haskey(c::WorldView, j) = false
+        Core.Compiler.get(c::WorldView, j, default) =
+            get!(c.cache, j, [])
+        function Core.Compiler.setindex!(c, ci, j)
+            cis = get(c.cache, j, [])
+            push!(cis, ci)
+        end
+
+        const local_cache = Vector()
+        struct Interpreter <: AbstractInterpreter end
+        Core.Compiler.InferenceParams(:) = InferenceParams()
+        Core.Compiler.OptimizationParams(::Interpreter) = OptimizationParams()
+        Core.Compiler.get_world_counter(:) = 1
+        Core.Compiler.get_inference_cache(::Interpreter) = local_cache
+        Core.Compiler.code_cache(::Interpreter) = WorldView(global_cache)
+
+        sig = Tuple{typeof(identity), Nothing}
+        meth = which(sig)
+        ti, env = ccall(:jl_type_intersection_with_env, Any,
+                    (Any, Any), meth.sig, sig)
+        mi = ccall(:jl_specializations_get_linfo, Ref{Core.MethodInstance},
+                (Any, Any, Any, UInt), meth, ti, env, 1)
+
+        const interp = Interpreter()
+        Core.Compiler.typeinf_ext_toplevel(interp, mi)
+
+        end
+        """)
+    Base.compilecache(Base.PkgId("CodeInstancePrecompile"))
+    (@eval (using CodeInstancePrecompile))
+end
