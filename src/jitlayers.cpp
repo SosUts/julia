@@ -13,6 +13,7 @@
 #if JL_LLVM_VERSION >= 130000
 #include <llvm/ExecutionEngine/Orc/ExecutorProcessControl.h>
 #endif
+#include <llvm/IR/Verifier.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/SmallVectorMemoryBuffer.h>
@@ -971,7 +972,9 @@ namespace {
                 JL_TIMING(LLVM_OPT);
 
                 //Run the optimization
+                assert(!verifyModule(M, &errs()));
                 (***PMs).run(M);
+                assert(!verifyModule(M, &errs()));
 
                 uint64_t end_time = 0;
                 {
