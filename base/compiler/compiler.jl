@@ -156,6 +156,7 @@ include("compiler/ssair/ir.jl")
 include("compiler/inferenceresult.jl")
 include("compiler/inferencestate.jl")
 
+include("compiler/abstractlattice.jl")
 include("compiler/typeutils.jl")
 include("compiler/typelimits.jl")
 include("compiler/typelattice.jl")

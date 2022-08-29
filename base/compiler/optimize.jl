@@ -215,7 +215,7 @@ function stmt_effect_flags(@nospecialize(stmt), @nospecialize(rt), src::Union{IR
     isa(stmt, PhiNode) && return (true, true)
     isa(stmt, ReturnNode) && return (false, true)
     isa(stmt, GotoNode) && return (false, true)
-    isa(stmt, GotoIfNot) && return (false, argextype(stmt.cond, src) ⊑ Bool)
+    isa(stmt, GotoIfNot) && return (false, argextype(stmt.cond, src) ⊑ₒ Bool)
     isa(stmt, Slot) && return (false, false) # Slots shouldn't occur in the IR at this point, but let's be defensive here
     if isa(stmt, GlobalRef)
         nothrow = isdefined(stmt.mod, stmt.name)
@@ -248,7 +248,7 @@ function stmt_effect_flags(@nospecialize(stmt), @nospecialize(rt), src::Union{IR
                 return (total, total)
             end
             rt === Bottom && return (false, false)
-            nothrow = _builtin_nothrow(f, Any[argextype(args[i], src) for i = 2:length(args)], rt)
+            nothrow = _builtin_nothrow(f, Any[argextype(args[i], src) for i = 2:length(args)], rt, OptimizerLattice())
             nothrow || return (false, false)
             return (contains_is(_EFFECT_FREE_BUILTINS, f), nothrow)
         elseif head === :new
@@ -262,7 +262,7 @@ function stmt_effect_flags(@nospecialize(stmt), @nospecialize(rt), src::Union{IR
             for fld_idx in 1:(length(args) - 1)
                 eT = argextype(args[fld_idx + 1], src)
                 fT = fieldtype(typ, fld_idx)
-                eT ⊑ fT || return (false, false)
+                eT ⊑ₒ fT || return (false, false)
             end
             return (true, true)
         elseif head === :foreigncall
@@ -277,11 +277,11 @@ function stmt_effect_flags(@nospecialize(stmt), @nospecialize(rt), src::Union{IR
             typ = argextype(args[1], src)
             typ, isexact = instanceof_tfunc(typ)
             isexact || return (false, false)
-            typ ⊑ Tuple || return (false, false)
+            typ ⊑ₒ Tuple || return (false, false)
             rt_lb = argextype(args[2], src)
             rt_ub = argextype(args[3], src)
             source = argextype(args[4], src)
-            if !(rt_lb ⊑ Type && rt_ub ⊑ Type && source ⊑ Method)
+            if !(rt_lb ⊑ₒ Type && rt_ub ⊑ₒ Type && source ⊑ₒ Method)
                 return (false, false)
             end
             return (true, true)
