@@ -312,7 +312,9 @@ function CodeInstance(
             const_flags = 0x00
         end
     end
-    relocatability = isa(inferred_result, Vector{UInt8}) ? inferred_result[end] : UInt8(0)
+    relocatability = isa(inferred_result, Vector{UInt8}) ? inferred_result[end] :
+                     inferred_result === nothing ? UInt8(1) : UInt8(0)
+    # relocatability = isa(inferred_result, Vector{UInt8}) ? inferred_result[end] : UInt8(0)
     return CodeInstance(result.linfo,
         widenconst(result_type), rettype_const, inferred_result,
         const_flags, first(valid_worlds), last(valid_worlds),
@@ -346,9 +348,9 @@ function maybe_compress_codeinfo(interp::AbstractInterpreter, linfo::MethodInsta
     end
 end
 
-function transform_result_for_cache(interp::AbstractInterpreter, linfo::MethodInstance,
-                                    valid_worlds::WorldRange, @nospecialize(inferred_result),
-                                    ipo_effects::Effects)
+function transform_result_for_cache(interp::AbstractInterpreter,
+    linfo::MethodInstance, valid_worlds::WorldRange, result::InferenceResult)
+    inferred_result = result.src
     # If we decided not to optimize, drop the OptimizationState now.
     # External interpreters can override as necessary to cache additional information
     if inferred_result isa OptimizationState
@@ -383,7 +385,7 @@ function cache_result!(interp::AbstractInterpreter, result::InferenceResult)
 
     # TODO: also don't store inferred code if we've previously decided to interpret this function
     if !already_inferred
-        inferred_result = transform_result_for_cache(interp, linfo, valid_worlds, result.src, result.ipo_effects)
+        inferred_result = transform_result_for_cache(interp, linfo, valid_worlds, result)
         code_cache(interp)[linfo] = CodeInstance(result, inferred_result, valid_worlds)
         if track_newly_inferred[]
             m = linfo.def
@@ -561,17 +563,12 @@ function store_backedges(frame::InferenceResult, edges::Vector{Any})
 end
 
 function store_backedges(caller::MethodInstance, edges::Vector{Any})
-    i = 1
-    while i <= length(edges)
-        to = edges[i]
+    for (typ, to) in BackedgeIterator(edges)
         if isa(to, MethodInstance)
-            ccall(:jl_method_instance_add_backedge, Cvoid, (Any, Any), to, caller)
-            i += 1
+            ccall(:jl_method_instance_add_backedge, Cvoid, (Any, Any, Any), to, typ, caller)
         else
             typeassert(to, Core.MethodTable)
-            typ = edges[i + 1]
             ccall(:jl_method_table_add_backedge, Cvoid, (Any, Any, Any), to, typ, caller)
-            i += 2
         end
     end
 end
@@ -880,7 +877,8 @@ function typeinf_edge(interp::AbstractInterpreter, method::Method, @nospecialize
     mi = specialize_method(method, atype, sparams)::MethodInstance
     code = get(code_cache(interp), mi, nothing)
     if code isa CodeInstance # return existing rettype if the code is already inferred
-        if code.inferred === nothing && is_stmt_inline(get_curr_ssaflag(caller))
+        inferred = @atomic :monotonic code.inferred
+        if inferred === nothing && is_stmt_inline(get_curr_ssaflag(caller))
             # we already inferred this edge before and decided to discard the inferred code,
             # nevertheless we re-infer it here again and keep it around in the local cache
             # since the inliner will request to use it later
@@ -1010,7 +1008,7 @@ function typeinf_ext(interp::AbstractInterpreter, mi::MethodInstance)
         code = get(code_cache(interp), mi, nothing)
         if code isa CodeInstance
             # see if this code already exists in the cache
-            inf = code.inferred
+            inf = @atomic :monotonic code.inferred
             if use_const_api(code)
                 i == 2 && ccall(:jl_typeinf_end, Cvoid, ())
                 tree = ccall(:jl_new_code_info_uninit, Ref{CodeInfo}, ())
