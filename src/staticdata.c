@@ -1951,7 +1951,7 @@ static void jl_save_system_image_to_stream(ios_t *f) JL_GC_DISABLED
         jl_printf(
             JL_STDERR,
             "ERROR: system image too large: sysimg.size is %jd but the limit is %lu\n",
-            sysimg.size,
+            (intmax_t)sysimg.size,
             ((uintptr_t)1 << RELOC_TAG_OFFSET)
         );
         jl_exit(1);
@@ -1960,7 +1960,7 @@ static void jl_save_system_image_to_stream(ios_t *f) JL_GC_DISABLED
         jl_printf(
             JL_STDERR,
             "ERROR: system image too large: const_data.size is %jd but the limit is %lu\n",
-            const_data.size,
+            (intmax_t)const_data.size,
             ((uintptr_t)1 << RELOC_TAG_OFFSET)*sizeof(void*)
         );
         jl_exit(1);
