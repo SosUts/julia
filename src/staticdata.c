@@ -1947,9 +1947,22 @@ static void jl_save_system_image_to_stream(ios_t *f) JL_GC_DISABLED
         jl_write_gv_tagrefs(&s);
     }
 
-    if (sysimg.size > ((uintptr_t)1 << RELOC_TAG_OFFSET) ||
-        const_data.size > ((uintptr_t)1 << RELOC_TAG_OFFSET)*sizeof(void*)) {
-        jl_printf(JL_STDERR, "ERROR: system image too large\n");
+    if (sysimg.size > ((uintptr_t)1 << RELOC_TAG_OFFSET)) {
+        jl_printf(
+            JL_STDERR,
+            "ERROR: system image too large: sysimg.size is %lld but the limit is %lu\n",
+            sysimg.size,
+            ((uintptr_t)1 << RELOC_TAG_OFFSET)
+        );
+        jl_exit(1);
+    }
+    if (const_data.size > ((uintptr_t)1 << RELOC_TAG_OFFSET)*sizeof(void*)) {
+        jl_printf(
+            JL_STDERR,
+            "ERROR: system image too large: const_data.size is %lld but the limit is %lu\n",
+            const_data.size,
+            ((uintptr_t)1 << RELOC_TAG_OFFSET)*sizeof(void*)
+        );
         jl_exit(1);
     }
 
